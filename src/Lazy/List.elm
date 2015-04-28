@@ -10,6 +10,7 @@ module Lazy.List
   , head
   , tail
   , cons
+  , (:::)
   , map
   , reduce
   , flatten
@@ -81,6 +82,9 @@ module Lazy.List
 
 # Useful Transducers
 @docs mapping, keeping, dropping
+
+# Infix Operators
+@docs (:::)
 -}
 
 import Trampoline exposing (Trampoline(..), trampoline)
@@ -570,3 +574,15 @@ Analogous to `dropIf`.
 dropping : (a -> Bool) -> (a -> b -> b) -> (a -> b -> b)
 dropping predicate =
   keeping (\a -> not (predicate a))
+
+
+---------------------
+-- INFIX OPERATORS --
+---------------------
+
+infixr 5 :::
+
+{-| Alias for cons.
+Analogous to `::` for lists.
+-}
+(:::) = cons
