@@ -1,7 +1,7 @@
 {
     "version": "1.0.0",
     "summary": "Lazy list implementation in Elm",
-    "repository": "https://github.com/USER/PROJECT.git",
+    "repository": "https://github.com/TheSeamau5/elm-lazy-list.git",
     "license": "BSD3",
     "source-directories": [
         "src"
