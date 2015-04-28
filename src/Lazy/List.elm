@@ -11,6 +11,7 @@ module Lazy.List
   , tail
   , cons
   , (:::)
+  , (+++)
   , map
   , reduce
   , flatten
@@ -84,7 +85,7 @@ module Lazy.List
 @docs mapping, keeping, dropping
 
 # Infix Operators
-@docs (:::)
+@docs (:::), (+++)
 -}
 
 import Trampoline exposing (Trampoline(..), trampoline)
@@ -586,3 +587,12 @@ infixr 5 :::
 Analogous to `::` for lists.
 -}
 (:::) = cons
+
+
+
+infixr 5 +++
+
+{-| Alias for append.
+Analogous to `+++` for lists.
+-}
+(+++) = append
