@@ -586,6 +586,7 @@ infixr 5 :::
 {-| Alias for cons.
 Analogous to `::` for lists.
 -}
+(:::) : a -> LazyList a -> LazyList a
 (:::) = cons
 
 
@@ -595,4 +596,5 @@ infixr 5 +++
 {-| Alias for append.
 Analogous to `+++` for lists.
 -}
+(+++) : LazyList a -> LazyList a -> LazyList a
 (+++) = append
