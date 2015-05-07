@@ -1,290 +1,209 @@
-module Lazy.List
-  ( LazyList (..)
-  , empty
-  , isEmpty
-  , unique
-  , length
-  , member
-  , sum
-  , product
-  , head
-  , tail
-  , cons
-  , (:::)
-  , (+++)
-  , map
-  , reduce
-  , flatten
-  , flatMap
-  , append
-  , reverse
-  , take
-  , takeWhile
-  , drop
-  , dropWhile
-  , repeat
-  , cycle
-  , iterate
-  , numbers
-  , nth
-  , keepIf
-  , dropIf
-  , foldl
-  , foldr
-  , andMap
-  , andThen
-  , map2
-  , map3
-  , map4
-  , map5
-  , zip
-  , zip3
-  , zip4
-  , zip5
-  , fromList
-  , toList
-  , fromArray
-  , toArray
-  , mapping
-  , keeping
-  , dropping
-  ) where
-{-| Lazy list implementation.
-
-# Definition
-@docs LazyList
-
-# Basics
-@docs empty, isEmpty, length, member
-
-# Query List
-@docs head, tail, nth
-
-# Common List operations
-@docs cons, map, reduce, flatten, flatMap, append, reverse, take, takeWhile, drop, dropWhile, unique
-
-# Infinite List producers
-@docs repeat, cycle, iterate, numbers
-
-# Folds
-@docs foldl, foldr, sum, product
-
-# Chaining Lists
-@docs andMap, andThen
-
-# All the maps
-@docs map2, map3, map4, map5
-
-# All the zips
-@docs zip, zip3, zip4, zip5
-
-# Conversions
-@docs toList, fromList, toArray, fromArray
-
-# Useful Transducers
-@docs mapping, keeping, dropping
-
-# Infix Operators
-@docs (:::), (+++)
--}
+module Lazy.List where
 
 import Trampoline exposing (Trampoline(..), trampoline)
 import Array      exposing (Array)
+import List
 
-
-type LazyList a
+type LazyListView a
   = Nil
-  | Cons a (() -> LazyList a)
+  | Cons a (LazyList a)
 
-{-| Push or cons a value onto the front of a list.
--}
-cons : a -> LazyList a -> LazyList a
-cons a list =
-  Cons a (\() -> list)
+type alias LazyList a = Lazy (LazyListView a)
 
-{-| The empty list.
--}
+type alias Lazy a = () -> a
+
+force a = a ()
+
 empty : LazyList a
-empty =
-  Nil
+empty _ = Nil
 
-{-| Produce an infinite list of a certain value.
--}
+isEmpty : LazyList a -> Bool
+isEmpty list =
+  case force list of
+    Nil -> True
+    _ -> False
+
+cons : a -> LazyList a -> LazyList a
+cons a list _ =
+  Cons a list
+
+
+head : LazyList a -> Maybe a
+head list =
+  case force list of
+    Nil -> Nothing
+    Cons first _ -> Just first
+
+
+tail : LazyList a -> Maybe (LazyList a)
+tail list =
+  case force list of
+    Nil -> Nothing
+    Cons _ rest -> Just rest
+
+
+
 repeat : a -> LazyList a
-repeat a =
-  Cons a (\() -> repeat a)
+repeat a _ =
+  cons a (repeat a) ()
 
 
-{-| Cycle a list n times
--}
-cycle : Int -> LazyList a -> LazyList a
-cycle n =
-  repeat >> take n >> flatten
+
+append : LazyList a -> LazyList a -> LazyList a
+append list1 list2 _ =
+  case force list1 of
+    Nil -> force list2
+    Cons first rest ->
+      force (first ::: rest +++ list2)
 
 
-{-| Produce an infinite list of repeated applications of a function on a value.
--}
+
+intersperse : LazyList a -> LazyList a -> LazyList a
+intersperse list1 list2 _ =
+  case force list1 of
+    Nil ->
+      force list2
+    Cons first1 rest1 ->
+      case force list2 of
+        Nil ->
+          force list1
+        Cons first2 rest2 ->
+          force (first1 ::: first2 ::: intersperse rest1 rest2)
+
+
+
+
+cycle : LazyList a -> LazyList a
+cycle list =
+  list +++ (\() ->
+    force (cycle list)
+  )
+
+-- TODO: Trampoline
 iterate : (a -> a) -> a -> LazyList a
-iterate f a =
-  Cons a (\() -> iterate f (f a))
+iterate f a _ =
+  cons a (iterate f (f a)) ()
 
-
-{-| An infinite numbers of integers starting at 1.
--}
 numbers : LazyList number
 numbers =
   iterate ((+) 1) 1
 
-{-} Ideal Recursive Implementation
+
+-- TODO: Trampoline
 take : Int -> LazyList a -> LazyList a
-take n list = case list of
-  Nil ->
+take n list _ =
+  if n <= 0
+  then
     Nil
-  Cons first rest ->
-    if n <= 0
-    then
-      Nil
-    else
-      cons first (rest ())
--}
-
-{-| Take n values from a list.
--}
-take : Int -> LazyList a -> LazyList a
-take n list = reverse <|
-  trampoline (take' n list empty)
+  else
+    case force list of
+      Nil -> Nil
+      Cons first rest ->
+        cons first (take (n - 1) rest) ()
 
 
-take' n list accum = case list of
-  Nil ->
-    Done accum
-  Cons first rest ->
-    if n <= 0
-    then
-      Done accum
-    else
-      Continue (\() -> take' (n - 1) (rest ()) (cons first accum))
 
-{-| Take values from a list iteratively as long as the predicate is satisfied.
--}
+-- TODO: Trampoline
 takeWhile : (a -> Bool) -> LazyList a -> LazyList a
-takeWhile predicate list = reverse <|
-  trampoline (takeWhile' predicate list empty)
-
-takeWhile' predicate list accum = case list of
-  Nil ->
-    Done accum
-  Cons first rest ->
-    if predicate first
-    then
-      Continue (\() -> takeWhile' predicate (rest ()) (cons first accum))
-    else
-      Done accum
-
-{-| Drop values from a list iteratively as long as the predicate is satisfied
--}
-dropWhile : (a -> Bool) -> LazyList a -> LazyList a
-dropWhile predicate list =
-  trampoline (dropWhile' predicate list)
-
-dropWhile' predicate list = case list of
-  Nil ->
-    Done Nil
-  Cons first rest ->
-    if predicate first
-    then
-      Continue (\() -> dropWhile' predicate (rest ()))
-    else
-      Done list
+takeWhile predicate list _ =
+  case force list of
+    Nil -> Nil
+    Cons first rest ->
+      if predicate first
+      then
+        Cons first (takeWhile predicate rest)
+      else
+        Nil
 
 
-{-| Drop n values from a list.
--}
+-- TODO: Trampoline
 drop : Int -> LazyList a -> LazyList a
-drop n list =
-  trampoline (drop' n list)
+drop n list _ =
+  if n <= 0
+  then
+    list ()
+  else
+    case force list of
+      Nil -> Nil
+      Cons first rest ->
+        drop (n - 1) rest ()
 
-drop' n list = case list of
-  Nil ->
-    Done Nil
-  Cons first rest ->
-    if n <= 0
-    then
-      Done list
-    else
-      Continue (\() -> drop' (n - 1) (rest ()))
 
-{-} Ideal recursive implementation
-member : a -> LazyList a -> Bool
-member a list = case list of
-  Nil ->
-    False
-  Cons first rest ->
-    first == a || member a (rest ())
--}
+-- TODO: Trampoline
+dropWhile : (a -> Bool) -> LazyList a -> LazyList a
+dropWhile predicate list _ =
+  case force list of
+    Nil -> Nil
+    Cons first rest ->
+      if predicate first
+      then
+        dropWhile predicate rest ()
+      else
+        list ()
 
-{-| Test if a value is a member of a list
--}
+
+-- TODO: Trampoline
 member : a -> LazyList a -> Bool
 member a list =
-  trampoline (member' a list)
+  case force list of
+    Nil -> False
+    Cons first rest ->
+      first == a || member a rest
 
-member' a list = case list of
-  Nil ->
-    Done False
-  Cons first rest ->
-    if first == a
-    then
-      Done True
-    else
-      Continue (\() -> member' a (rest ()))
-
-{-}
-unique : LazyList a -> LazyList a
-unique list = case list of
-  Nil -> Nil
-  Cons first rest ->
-    let
-        rest' = rest ()
-    in
-        if member first rest'
-        then
-          unique rest'
-        else
-          cons first rest'
--}
-
-{-| Remove duplicates from a list.
--}
-unique : LazyList a -> LazyList a
-unique list = reverse <|
-  trampoline (unique' list empty)
-
-unique' list accum = case list of
-  Nil ->
-    Done accum
-  Cons first rest ->
-    let
-        rest' = rest ()
-    in
-        if member first rest'
-        then
-          Continue (\() -> unique' rest' accum)
-        else
-          Continue (\() -> unique' rest' (cons first accum))
-
-
-
-
-isEmpty : LazyList a -> Bool
-isEmpty list = case list of
-  Cons _ _ -> True
-  _ -> False
 
 length : LazyList a -> Int
 length =
   reduce (\_ n -> n + 1) 0
 
+
+-- TODO: Trampoline
+unique : LazyList a -> LazyList a
+unique list _ =
+  case force list of
+    Nil -> Nil
+    Cons first rest ->
+      if first `member` rest
+      then
+        unique rest ()
+      else
+        Cons first (unique rest)
+
+
+-- TODO: Trampoline
+keepIf : (a -> Bool) -> LazyList a -> LazyList a
+keepIf predicate list _ =
+  case force list of
+    Nil -> Nil
+    Cons first rest ->
+      if predicate first
+      then
+        Cons first (keepIf predicate rest)
+      else
+        keepIf predicate rest ()
+
+
+-- TODO: Trampoline
+dropIf : (a -> Bool) -> LazyList a -> LazyList a
+dropIf predicate =
+  keepIf (\n -> not (predicate n))
+
+
+-- TODO: Trampoline
+reduce : (a -> b -> b) -> b -> LazyList a -> b
+reduce reducer b list =
+  case force list of
+    Nil -> b
+    Cons first rest ->
+      reduce reducer (reducer first b) rest
+
+
+foldl : (a -> b -> b) -> b -> LazyList a -> b
+foldl = reduce
+
+
+foldr : (a -> b -> b) -> b -> LazyList a -> b
+foldr reducer b list =
+  Array.foldr reducer b (toArray list)
 
 sum : LazyList number -> number
 sum =
@@ -295,64 +214,68 @@ product =
   reduce (*) 1
 
 
-{-} Ideal recursive implementation
-nth : Int -> LazyList a -> Maybe a
-nth n list = case list of
-  Nil -> Nothing
-  Cons first rest ->
-    if | n <= 0 -> Nothing
-       | n == 1 -> Just first
-       | otherwise ->
-          nth (n - 1) (rest ())
--}
-
-{-| Get the nth value from a lazy list.
-Note : nth considers lists to be 1-indexed.
--}
-nth : Int -> LazyList a -> Maybe a
-nth n list =
-  trampoline (nth' n list)
-
-nth' n list = case list of
-  Nil -> Done Nothing
-  Cons first rest ->
-    if | n <= 0 -> Done Nothing
-       | n == 1 -> Done (Just first)
-       | otherwise ->
-          Continue (\() -> nth' (n - 1) (rest ()))
-
-
-
-{-| Map a function onto a list.
--}
-map : (a -> b) -> LazyList a -> LazyList b
-map f list = case list of
-  Nil -> Nil
-  Cons first rest ->
-    Cons (f first) (\() -> map f (rest ()))
-
-map2 : (a -> b -> c) -> LazyList a -> LazyList b -> LazyList c
-map2 f l1 l2 = case l1 of
-  Nil -> Nil
-  Cons f1 r1 -> case l2 of
+-- TODO: Trampoline
+flatten : LazyList (LazyList a) -> LazyList a
+flatten list _ =
+  case force list of
     Nil -> Nil
-    Cons f2 r2 ->
-      Cons (f f1 f2) (\() -> map2 f (r1 ()) (r2 ()))
+    Cons first rest ->
+      force (first +++ flatten rest)
+
+
+flatMap : (a -> LazyList b) -> LazyList a -> LazyList b
+flatMap f =
+  map f >> flatten
+
+andThen : LazyList a -> (a -> LazyList b) -> LazyList b
+andThen =
+  flip flatMap
+
+
+reverse : LazyList a -> LazyList a
+reverse =
+  reduce cons empty
+
+-- TODO: Trampoline
+map : (a -> b) -> LazyList a -> LazyList b
+map f list _ =
+  case force list of
+    Nil -> Nil
+    Cons first rest ->
+      Cons (f first) (map f rest)
+
+-- TODO: Trampoline
+map2 : (a -> b -> c) -> LazyList a -> LazyList b -> LazyList c
+map2 f list1 list2 _ =
+  case force list1 of
+    Nil -> Nil
+    Cons first1 rest1 ->
+      case force list2 of
+        Nil -> Nil
+        Cons first2 rest2 ->
+          Cons (f first1 first2) (map2 f rest1 rest2)
+
+
+andMap : LazyList (a -> b) -> LazyList a -> LazyList b
+andMap =
+  map2 (<|)
+
 
 map3 : (a -> b -> c -> d) -> LazyList a -> LazyList b -> LazyList c -> LazyList d
 map3 f l1 l2 l3 =
   f
-    `map`    l1
+    `map` l1
     `andMap` l2
     `andMap` l3
 
 map4 : (a -> b -> c -> d -> e) -> LazyList a -> LazyList b -> LazyList c -> LazyList d -> LazyList e
 map4 f l1 l2 l3 l4 =
   f
-    `map`    l1
+    `map` l1
     `andMap` l2
     `andMap` l3
     `andMap` l4
+
 
 map5 : (a -> b -> c -> d -> e -> f) -> LazyList a -> LazyList b -> LazyList c -> LazyList d -> LazyList e -> LazyList f
 map5 f l1 l2 l3 l4 l5 =
@@ -362,6 +285,7 @@ map5 f l1 l2 l3 l4 l5 =
     `andMap` l3
     `andMap` l4
     `andMap` l5
+
 
 zip : LazyList a -> LazyList b -> LazyList (a, b)
 zip =
@@ -379,173 +303,34 @@ zip5 : LazyList a -> LazyList b -> LazyList c -> LazyList d -> LazyList e -> Laz
 zip5 =
   map5 (,,,,)
 
-{-| Flatten a list of lists.
--}
-flatten : LazyList (LazyList a) -> LazyList a
-flatten =
-  foldr append Nil
 
-{-| Map a list constructor onto a list and flatten the result.
--}
-flatMap : (a -> LazyList b) -> LazyList a -> LazyList b
-flatMap f =
-  flatten << map f
-
-
-{-| This is useful when you want a version of `mapN` that is greater than 5.
--}
-andMap : LazyList (a -> b) -> LazyList a -> LazyList b
-andMap =
-  map2 (<|)
-
-{-| Chain a list and a list constructor.
--}
-andThen : LazyList a -> (a -> LazyList b) -> LazyList b
-andThen =
-  flip flatMap
-
-{-| Append two lists together.
--}
-append : LazyList a -> LazyList a -> LazyList a
-append l1 l2 = case l1 of
-  Nil -> l2
-  Cons first rest ->
-    Cons first (\() -> append (rest ()) l2)
-
-{-| Return the first element of a list. This returns `Nothing` if the list
-is empty.
--}
-head : LazyList a -> Maybe a
-head list = case list of
-  Nil       -> Nothing
-  Cons a _  -> Just a
-
-{-| Get the tail of a list. This returns `Nothing` if the list is empty.
--}
-tail : LazyList a -> Maybe (LazyList a)
-tail list = case list of
-  Nil         -> Nothing
-  Cons _ rest -> Just (rest ())
-
-{-| Reverse a list.
--}
-reverse : LazyList a -> LazyList a
-reverse =
-  reduce cons Nil
-
-{-} Ideal recursive implementation
-reduce : (a -> b -> b) -> b -> LazyList a -> b
-reduce reducer initial list = case list of
-  Nil -> initial
-  Cons first rest ->
-    reduce reducer (reducer first initial) (rest ())
--}
-
-{-| Analogous to `List.foldl`. Reduce a list with a binary operation and an
-initial value.
--}
-reduce : (a -> b -> b) -> b -> LazyList a -> b
-reduce reducer initial list =
-  trampoline (reduce' reducer initial list)
-
-{- Trampolined implementation
--}
-reduce' : (a -> b -> b) -> b -> LazyList a -> Trampoline b
-reduce' reducer initial list = case list of
-  Nil ->
-    Done initial
-  Cons first rest ->
-    Continue (\() -> reduce' reducer (reducer first initial) (rest ()))
-
-
-{- Ideal recursive implementation.
-keepIf : (a -> Bool) -> LazyList a -> LazyList a
-keepIf predicate list = case list of
-  Nil ->
-    Nil
-  Cons first rest ->
-    if predicate first
-    then
-      Cons first (\() -> keepIf predicate (rest ()))
-    else
-      keepIf predicate (rest ())
--}
-
-{-| Keep elements in list only if they satisfy a given predicate.
--}
-keepIf : (a -> Bool) -> LazyList a -> LazyList a
-keepIf predicate =
-  foldr (keeping predicate cons) empty
-
-
-{-| Drop elements from list only if they satisfy a given predicate.
--}
-dropIf : (a -> Bool) -> LazyList a -> LazyList a
-dropIf predicate =
-  keepIf (\a -> not (predicate a))
-
-
-{-| Fold from the left. Alias for `reduce`.
--}
-foldl : (a -> b -> b) -> b -> LazyList a -> b
-foldl =
-  reduce
-
-{-| Fold from the right.
--}
-foldr : (a -> b -> b) -> b -> LazyList a -> b
-foldr reducer initial =
-  toArray >> Array.foldr reducer initial
-
-{-} Ideal recursive implementation
-toList : LazyList a -> List a
-toList list = case list of
-  Nil ->
-    []
-  Cons first rest ->
-    first :: toList (rest ())
--}
-
-{-| Convert a lazy list to a regular list.
--}
+-- TODO: Trampoline
 toList : LazyList a -> List a
 toList list =
-  trampoline (toList' [] list)
-
-{- Trampolined implementation
--}
-toList' accum list = case list of
-  Nil ->
-    Done accum
-  Cons first rest ->
-    Continue (\() -> toList' (accum ++ [first]) (rest ()))
+  case force list of
+    Nil -> []
+    Cons first rest ->
+      first :: toList rest
 
 
-{-| Convert a list to a lazy list.
--}
 fromList : List a -> LazyList a
 fromList =
   List.foldr cons empty
 
-
-{-| Convert a lazy list to an array.
--}
+-- TODO: Trampoline
 toArray : LazyList a -> Array a
 toArray list =
-  trampoline (toArray' Array.empty list)
-
-toArray' accum list = case list of
-  Nil ->
-    Done accum
-  Cons first rest ->
-    Continue (\() -> toArray' (Array.push first accum) (rest ()))
+  case force list of
+    Nil -> Array.empty
+    Cons first rest ->
+      Array.append (Array.push first Array.empty) (toArray rest)
 
 
-{-| Convert an array to a lazy list.
--}
+
 fromArray : Array a -> LazyList a
 fromArray =
   Array.foldr cons empty
+
 
 -----------------
 -- TRANSDUCERS --
@@ -577,24 +362,19 @@ dropping predicate =
   keeping (\a -> not (predicate a))
 
 
+
+
 ---------------------
 -- INFIX OPERATORS --
 ---------------------
 
 infixr 5 :::
 
-{-| Alias for cons.
-Analogous to `::` for lists.
--}
 (:::) : a -> LazyList a -> LazyList a
 (:::) = cons
 
 
-
 infixr 5 +++
 
-{-| Alias for append.
-Analogous to `+++` for lists.
--}
 (+++) : LazyList a -> LazyList a -> LazyList a
 (+++) = append
