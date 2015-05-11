@@ -3,6 +3,8 @@ module Lazy.List where
 import Trampoline exposing (Trampoline(..), trampoline)
 import Array      exposing (Array)
 import List
+import Random exposing (Generator, Seed)
+import Random.Extra as Random
 
 type LazyListView a
   = Nil
@@ -11,6 +13,25 @@ type LazyListView a
 type alias LazyList a = Lazy (LazyListView a)
 
 type alias Lazy a = () -> a
+
+
+genList : Int -> Generator a -> Seed -> (LazyList a, Seed)
+genList n generator seed =
+  if n <= 0
+  then
+      (empty, seed)
+  else
+      let (value, nextSeed) = Random.generate generator seed
+      in
+          (\() ->
+              Cons value (fst (genList (n - 1) generator nextSeed))
+          , nextSeed
+          )
+
+lazylist : Int -> Generator a -> Generator (LazyList a)
+lazylist n generator =
+  Random.customGenerator (genList n generator)
+
 
 force a = a ()
 
