@@ -1,4 +1,52 @@
 module Lazy.List where
+{-| Lazy list implementation in Elm.
+
+# Types
+@docs LazyList, LazyListView, Lazy
+
+# Force lazy evaluation
+@docs force
+
+# Constructors
+@docs cons, empty
+
+# Query operations
+@docs isEmpty, head, tail, member, length
+
+# Conversions
+@docs toList, fromList, toArray, fromArray
+
+# Map-reduce et al.
+@docs map, zip, reduce, flatten, flatMap, append, foldl, foldr
+
+# Common operations
+@docs intersperse, reverse, cycle, iterate, repeat, take, takeWhile, drop, dropWhile
+
+# Filtering operations
+@docs keepIf, dropIf, unique
+
+# Chaining operations
+@docs andMap, andThen
+
+# Useful stuff
+@docs numbers, sum, product
+
+# All the maps!
+@docs map2, map3, map4, map5
+
+# All the zips!
+@docs zip3, zip4, zip5
+
+# Common Transducers
+@docs mapping, keeping, dropping
+
+# Infix Operators
+@docs (:::), (+++)
+
+# Random Generation Helpers
+@docs genList, lazylist
+
+-}
 
 import Trampoline exposing (Trampoline(..), trampoline)
 import Array      exposing (Array)
