@@ -2,10 +2,7 @@ module Lazy.List where
 {-| Lazy list implementation in Elm.
 
 # Types
-@docs LazyList, LazyListView, Lazy
-
-# Force lazy evaluation
-@docs force
+@docs LazyList, LazyListView
 
 # Constructors
 @docs cons, empty
@@ -37,9 +34,6 @@ module Lazy.List where
 # All the zips!
 @docs zip3, zip4, zip5
 
-# Common Transducers
-@docs mapping, keeping, dropping
-
 # Infix Operators
 @docs (:::), (+++)
 
@@ -48,11 +42,11 @@ module Lazy.List where
 
 -}
 
-import Trampoline exposing (Trampoline(..), trampoline)
 import Array      exposing (Array)
 import List
 import Random exposing (Generator, Seed)
 import Random.Extra as Random
+import Lazy exposing (Lazy, lazy, force)
 
 {-| Analogous to `List` type. This is the actual implementation type for the
 `LazyList` type. This type is exposed to the user if the user so wishes to
@@ -68,13 +62,6 @@ type LazyListView a
 -}
 type alias LazyList a = Lazy (LazyListView a)
 
-{-| A Lazy value is a delayed value. This delay is induced by the lambda.
-This means that what's inside the lambda could require arbitrary amounts of
-compute power but will not do anything unless you manually `force` the
-evaluation of this value.
--}
-type alias Lazy a = () -> a
-
 
 {-| Lazily randomly generate `n` many values.
 -}
@@ -86,7 +73,7 @@ genList n generator seed =
   else
       let (value, nextSeed) = Random.generate generator seed
       in
-          (\() ->
+          (lazy <| \() ->
               Cons value (fst (genList (n - 1) generator nextSeed))
           , nextSeed
           )
@@ -98,18 +85,12 @@ lazylist n generator =
   Random.customGenerator (genList n generator)
 
 
-{-| Force evaluation of a lazy value.
-Be very careful when using this function. Lazy values can potentially be
-infinitely recursive or be very computationally intensive. Try to avoid calling
-this function if you can, and plan its use if you must.
--}
-force : Lazy a -> a
-force a = a ()
-
 {-| Create an empty list.
 -}
 empty : LazyList a
-empty _ = Nil
+empty =
+  lazy <|
+    \() -> Nil
 
 
 {-| Detect if a list is empty or not.
@@ -123,7 +104,7 @@ isEmpty list =
 {-| Add a value to the front of a list.
 -}
 cons : a -> LazyList a -> LazyList a
-cons a list _ =
+cons a list = lazy <| \() ->
   Cons a list
 
 
@@ -153,14 +134,14 @@ finish computing. Make sure you then filter it down to a finite list with `head`
 or `take` or something.
 -}
 repeat : a -> LazyList a
-repeat a _ =
-  cons a (repeat a) ()
+repeat a = lazy <| \() ->
+  Cons a (repeat a)
 
 
 {-| Append a list to another list.
 -}
 append : LazyList a -> LazyList a -> LazyList a
-append list1 list2 _ =
+append list1 list2 = lazy <| \() ->
   case force list1 of
     Nil -> force list2
     Cons first rest ->
@@ -171,7 +152,7 @@ append list1 list2 _ =
 interleaved at the end.
 -}
 intersperse : LazyList a -> LazyList a -> LazyList a
-intersperse list1 list2 _ =
+intersperse list1 list2 = lazy <| \() ->
   case force list1 of
     Nil ->
       force list2
@@ -190,11 +171,11 @@ the case of an infinite list.
 -}
 cycle : LazyList a -> LazyList a
 cycle list =
-  list +++ (\() ->
+  list +++ (lazy <| \() ->
     force (cycle list)
   )
 
--- TODO: Trampoline
+
 {-| Create an infinite list of applications of a function on some value.
 
 Equivalent to:
@@ -202,8 +183,8 @@ Equivalent to:
     x ::: f x ::: f (f x) ::: f (f (f x)) ::: ... -- etc...
 -}
 iterate : (a -> a) -> a -> LazyList a
-iterate f a _ =
-  cons a (iterate f (f a)) ()
+iterate f a = lazy <| \() ->
+  Cons a (iterate f (f a))
 
 {-| The list of counting numbers.
 
@@ -216,11 +197,11 @@ numbers =
   iterate ((+) 1) 1
 
 
--- TODO: Trampoline
+
 {-| Take at most `n` many values from a list.
 -}
 take : Int -> LazyList a -> LazyList a
-take n list _ =
+take n list = lazy <| \() ->
   if n <= 0
   then
     Nil
@@ -228,15 +209,15 @@ take n list _ =
     case force list of
       Nil -> Nil
       Cons first rest ->
-        cons first (take (n - 1) rest) ()
+        Cons first (take (n - 1) rest)
 
 
 
--- TODO: Trampoline
+
 {-| Take elements from a list as long as the predicate is satisfied.
 -}
 takeWhile : (a -> Bool) -> LazyList a -> LazyList a
-takeWhile predicate list _ =
+takeWhile predicate list = lazy <| \() ->
   case force list of
     Nil -> Nil
     Cons first rest ->
@@ -247,37 +228,37 @@ takeWhile predicate list _ =
         Nil
 
 
--- TODO: Trampoline
+
 {-| Drop at most `n` many values from a list.
 -}
 drop : Int -> LazyList a -> LazyList a
-drop n list _ =
+drop n list = lazy <| \() ->
   if n <= 0
   then
-    list ()
+    force list
   else
     case force list of
       Nil -> Nil
       Cons first rest ->
-        drop (n - 1) rest ()
+        force (drop (n - 1) rest)
 
 
--- TODO: Trampoline
+
 {-| Drop elements from a list as long as the predicate is satisfied.
 -}
 dropWhile : (a -> Bool) -> LazyList a -> LazyList a
-dropWhile predicate list _ =
+dropWhile predicate list = lazy <| \() ->
   case force list of
     Nil -> Nil
     Cons first rest ->
       if predicate first
       then
-        dropWhile predicate rest ()
+        force (dropWhile predicate rest)
       else
-        list ()
+        force list
 
 
--- TODO: Trampoline
+
 {-| Test if a value is a member of a list.
 -}
 member : a -> LazyList a -> Bool
@@ -297,26 +278,26 @@ length =
   reduce (\_ n -> n + 1) 0
 
 
--- TODO: Trampoline
+
 {-| Remove all duplicates from a list and return a list of distinct elements.
 -}
 unique : LazyList a -> LazyList a
-unique list _ =
+unique list = lazy <| \() ->
   case force list of
     Nil -> Nil
     Cons first rest ->
       if first `member` rest
       then
-        unique rest ()
+        force (unique rest)
       else
         Cons first (unique rest)
 
 
--- TODO: Trampoline
+
 {-| Keep all elements in a list that satisfy the given predicate.
 -}
 keepIf : (a -> Bool) -> LazyList a -> LazyList a
-keepIf predicate list _ =
+keepIf predicate list = lazy <| \() ->
   case force list of
     Nil -> Nil
     Cons first rest ->
@@ -324,10 +305,10 @@ keepIf predicate list _ =
       then
         Cons first (keepIf predicate rest)
       else
-        keepIf predicate rest ()
+        force (keepIf predicate rest)
 
 
--- TODO: Trampoline
+
 {-| Drop all elements in a list that satisfy the given predicate.
 -}
 dropIf : (a -> Bool) -> LazyList a -> LazyList a
@@ -335,7 +316,7 @@ dropIf predicate =
   keepIf (\n -> not (predicate n))
 
 
--- TODO: Trampoline
+
 {-| Reduce a list with a given reducer and an initial value.
 
 Example :
@@ -374,12 +355,12 @@ product =
   reduce (*) 1
 
 
--- TODO: Trampoline
+
 {-| Flatten a list of lists into a single list by appending all the inner
 lists into one big list.
 -}
 flatten : LazyList (LazyList a) -> LazyList a
-flatten list _ =
+flatten list = lazy <| \() ->
   case force list of
     Nil -> Nil
     Cons first rest ->
@@ -405,19 +386,19 @@ reverse : LazyList a -> LazyList a
 reverse =
   reduce cons empty
 
--- TODO: Trampoline
+
 {-| Map a function to a list.
 -}
 map : (a -> b) -> LazyList a -> LazyList b
-map f list _ =
+map f list = lazy <| \() ->
   case force list of
     Nil -> Nil
     Cons first rest ->
       Cons (f first) (map f rest)
 
--- TODO: Trampoline
+{-|-}
 map2 : (a -> b -> c) -> LazyList a -> LazyList b -> LazyList c
-map2 f list1 list2 _ =
+map2 f list1 list2 = lazy <| \() ->
   case force list1 of
     Nil -> Nil
     Cons first1 rest1 ->
@@ -434,7 +415,7 @@ andMap : LazyList (a -> b) -> LazyList a -> LazyList b
 andMap =
   map2 (<|)
 
-
+{-|-}
 map3 : (a -> b -> c -> d) -> LazyList a -> LazyList b -> LazyList c -> LazyList d
 map3 f l1 l2 l3 =
   f
@@ -442,6 +423,7 @@ map3 f l1 l2 l3 =
     `andMap` l2
     `andMap` l3
 
+{-|-}
 map4 : (a -> b -> c -> d -> e) -> LazyList a -> LazyList b -> LazyList c -> LazyList d -> LazyList e
 map4 f l1 l2 l3 l4 =
   f
@@ -450,7 +432,7 @@ map4 f l1 l2 l3 l4 =
     `andMap` l3
     `andMap` l4
 
-
+{-|-}
 map5 : (a -> b -> c -> d -> e -> f) -> LazyList a -> LazyList b -> LazyList c -> LazyList d -> LazyList e -> LazyList f
 map5 f l1 l2 l3 l4 l5 =
   f
@@ -460,25 +442,28 @@ map5 f l1 l2 l3 l4 l5 =
     `andMap` l4
     `andMap` l5
 
-
+{-|-}
 zip : LazyList a -> LazyList b -> LazyList (a, b)
 zip =
   map2 (,)
 
+{-|-}
 zip3 : LazyList a -> LazyList b -> LazyList c -> LazyList (a, b, c)
 zip3 =
   map3 (,,)
 
+{-|-}
 zip4 : LazyList a -> LazyList b -> LazyList c -> LazyList d -> LazyList (a, b, c, d)
 zip4 =
   map4 (,,,)
 
+{-|-}
 zip5 : LazyList a -> LazyList b -> LazyList c -> LazyList d -> LazyList e -> LazyList (a, b, c, d, e)
 zip5 =
   map5 (,,,,)
 
 
--- TODO: Trampoline
+
 {-| Convert a lazy list to a normal list.
 -}
 toList : LazyList a -> List a
@@ -495,7 +480,7 @@ fromList : List a -> LazyList a
 fromList =
   List.foldr cons empty
 
--- TODO: Trampoline
+
 {-| Convert a lazy list to an array.
 -}
 toArray : LazyList a -> Array a
@@ -513,38 +498,6 @@ fromArray =
   Array.foldr cons empty
 
 
------------------
--- TRANSDUCERS --
------------------
-
-{-| Mapping transducer.
-Map a function on a reducer.
--}
-mapping : (a -> b) -> (b -> c -> c) -> (a -> c -> c)
-mapping f reducer a c =
-  reducer (f a) c
-
-{-| Keeping transducer.
-Analogous to `keepIf`.
--}
-keeping : (a -> Bool) -> (a -> b -> b) -> (a -> b -> b)
-keeping predicate reducer a b =
-  if predicate a
-  then
-    reducer a b
-  else
-    b
-
-{-| Dropping transducer.
-Analogous to `dropIf`.
--}
-dropping : (a -> Bool) -> (a -> b -> b) -> (a -> b -> b)
-dropping predicate =
-  keeping (\a -> not (predicate a))
-
-
-
-
 ---------------------
 -- INFIX OPERATORS --
 ---------------------
@@ -554,7 +507,8 @@ infixr 5 :::
 {-| Alias for `cons`. Analogous to `::` for lists.
 -}
 (:::) : a -> LazyList a -> LazyList a
-(:::) = cons
+(:::) =
+  cons
 
 
 infixr 5 +++
@@ -562,4 +516,5 @@ infixr 5 +++
 {-| Alias for `append`. Analogous to `++` for lists.
 -}
 (+++) : LazyList a -> LazyList a -> LazyList a
-(+++) = append
+(+++) =
+  append
