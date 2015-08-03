@@ -5,7 +5,7 @@ module Lazy.List where
 @docs LazyList, LazyListView
 
 # Constructors
-@docs cons, empty
+@docs cons, empty, singleton
 
 # Query operations
 @docs isEmpty, head, tail, member, length
@@ -17,7 +17,7 @@ module Lazy.List where
 @docs map, zip, reduce, flatten, flatMap, append, foldl, foldr
 
 # Common operations
-@docs intersperse, reverse, cycle, iterate, repeat, take, takeWhile, drop, dropWhile
+@docs intersperse, interleave, reverse, cycle, iterate, repeat, take, takeWhile, drop, dropWhile
 
 # Filtering operations
 @docs keepIf, dropIf, unique
@@ -92,6 +92,11 @@ empty =
   lazy <|
     \() -> Nil
 
+{-| Create a singleton list.
+-}
+singleton : a -> LazyList a
+singleton a =
+  cons a empty
 
 {-| Detect if a list is empty or not.
 -}
@@ -148,11 +153,11 @@ append list1 list2 = lazy <| \() ->
       force (first ::: rest +++ list2)
 
 
-{-| Intersperse the elements of a list in another list. The two lists get
+{-| Interleave the elements of a list in another list. The two lists get
 interleaved at the end.
 -}
-intersperse : LazyList a -> LazyList a -> LazyList a
-intersperse list1 list2 = lazy <| \() ->
+interleave : LazyList a -> LazyList a -> LazyList a
+interleave list1 list2 = lazy <| \() ->
   case force list1 of
     Nil ->
       force list2
@@ -161,7 +166,29 @@ intersperse list1 list2 = lazy <| \() ->
         Nil ->
           force list1
         Cons first2 rest2 ->
-          force (first1 ::: first2 ::: intersperse rest1 rest2)
+          force (first1 ::: first2 ::: interleave rest1 rest2)
+
+{-| Places the given value between all members of the given list.
+-}
+intersperse : a -> LazyList a -> LazyList a
+intersperse a list = lazy <| \() ->
+  case force list of
+    Nil ->
+      Nil
+
+    Cons first rest ->
+      case force rest of
+        Nil ->
+          force (first ::: empty)
+
+        Cons second tail ->
+          case force tail of
+            Nil ->
+              force (first ::: a ::: second ::: empty)
+
+            _ ->
+              force (first ::: a ::: second ::: a ::: intersperse a tail)
+
 
 
 
