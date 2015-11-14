@@ -1,8 +1,8 @@
 {
-    "version": "2.0.0",
+    "version": "1.0.0",
     "summary": "Lazy list implementation in Elm",
-    "repository": "https://github.com/TheSeamau5/elm-lazy-list.git",
-    "license": "BSD3",
+    "repository": "https://github.com/NoRedInk/elm-lazy-list.git",
+    "license": "BSD-3-Clause",
     "source-directories": [
         "src"
     ],
@@ -10,7 +10,7 @@
         "Lazy.List"
     ],
     "dependencies": {
-        "TheSeamau5/elm-random-extra": "2.1.0 <= v < 3.0.0",
+        "NoRedInk/elm-random-extra": "1.0.0 <= v < 2.0.0",
         "elm-lang/core": "2.0.0 <= v < 3.0.0",
         "maxsnew/lazy": "1.0.1 <= v < 2.0.0"
     },
