@@ -10,7 +10,6 @@
         "Lazy.List"
     ],
     "dependencies": {
-        "NoRedInk/elm-random-extra": "1.0.0 <= v < 2.0.0",
         "elm-lang/core": "2.0.0 <= v < 3.0.0",
         "maxsnew/lazy": "1.0.1 <= v < 2.0.0"
     },

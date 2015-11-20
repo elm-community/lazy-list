@@ -37,15 +37,11 @@ module Lazy.List where
 # Infix Operators
 @docs (:::), (+++)
 
-# Random Generation Helpers
-@docs genList, lazylist
-
 -}
 
 import Array      exposing (Array)
 import List
 import Random exposing (Generator, Seed)
-import Random.Extra as Random
 import Lazy exposing (Lazy, lazy, force)
 
 {-| Analogous to `List` type. This is the actual implementation type for the
@@ -61,28 +57,6 @@ type LazyListView a
 {-| Lazy List type.
 -}
 type alias LazyList a = Lazy (LazyListView a)
-
-
-{-| Lazily randomly generate `n` many values.
--}
-genList : Int -> Generator a -> Seed -> (LazyList a, Seed)
-genList n generator seed =
-  if n <= 0
-  then
-      (empty, seed)
-  else
-      let (value, nextSeed) = Random.generate generator seed
-      in
-          (lazy <| \() ->
-              Cons value (fst (genList (n - 1) generator nextSeed))
-          , nextSeed
-          )
-
-{-| Analogue of `Random.list` generator constructor.
--}
-lazylist : Int -> Generator a -> Generator (LazyList a)
-lazylist n generator =
-  Random.customGenerator (genList n generator)
 
 
 {-| Create an empty list.
