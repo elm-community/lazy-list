@@ -1,5 +1,5 @@
 {
-    "version": "1.0.0",
+    "version": "2.0.0",
     "summary": "Lazy list implementation in Elm",
     "repository": "https://github.com/NoRedInk/elm-lazy-list.git",
     "license": "BSD-3-Clause",
