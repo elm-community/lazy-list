@@ -1,4 +1,4 @@
-module Lazy.List where
+module Lazy.List exposing (..)
 {-| Lazy list implementation in Elm.
 
 # Types
