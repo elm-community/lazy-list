@@ -1,4 +1,5 @@
 module Lazy.List exposing (..)
+
 {-| Lazy list implementation in Elm.
 
 # Types
@@ -39,10 +40,11 @@ module Lazy.List exposing (..)
 
 -}
 
-import Array      exposing (Array)
+import Array exposing (Array)
 import List
 import Random exposing (Generator, Seed)
 import Lazy exposing (Lazy, lazy, force)
+
 
 {-| Analogous to `List` type. This is the actual implementation type for the
 `LazyList` type. This type is exposed to the user if the user so wishes to
@@ -51,59 +53,74 @@ recommended to work with this type directly. Try working solely with the
 provided functions in the package.
 -}
 type LazyListView a
-  = Nil
-  | Cons a (LazyList a)
+    = Nil
+    | Cons a (LazyList a)
+
 
 {-| Lazy List type.
 -}
-type alias LazyList a = Lazy (LazyListView a)
+type alias LazyList a =
+    Lazy (LazyListView a)
 
 
 {-| Create an empty list.
 -}
 empty : LazyList a
 empty =
-  lazy <|
-    \() -> Nil
+    lazy <|
+        \() -> Nil
+
 
 {-| Create a singleton list.
 -}
 singleton : a -> LazyList a
 singleton a =
-  cons a empty
+    cons a empty
+
 
 {-| Detect if a list is empty or not.
 -}
 isEmpty : LazyList a -> Bool
 isEmpty list =
-  case force list of
-    Nil -> True
-    _ -> False
+    case force list of
+        Nil ->
+            True
+
+        _ ->
+            False
+
 
 {-| Add a value to the front of a list.
 -}
 cons : a -> LazyList a -> LazyList a
-cons a list = lazy <| \() ->
-  Cons a list
+cons a list =
+    lazy <|
+        \() ->
+            Cons a list
 
 
 {-| Get the head of a list.
 -}
 head : LazyList a -> Maybe a
 head list =
-  case force list of
-    Nil -> Nothing
-    Cons first _ -> Just first
+    case force list of
+        Nil ->
+            Nothing
+
+        Cons first _ ->
+            Just first
 
 
 {-| Get the tail of a list.
 -}
 tail : LazyList a -> Maybe (LazyList a)
 tail list =
-  case force list of
-    Nil -> Nothing
-    Cons _ rest -> Just rest
+    case force list of
+        Nil ->
+            Nothing
 
+        Cons _ rest ->
+            Just rest
 
 
 {-| Repeat a value ad infinitum.
@@ -113,57 +130,68 @@ finish computing. Make sure you then filter it down to a finite list with `head`
 or `take` or something.
 -}
 repeat : a -> LazyList a
-repeat a = lazy <| \() ->
-  Cons a (repeat a)
+repeat a =
+    lazy <|
+        \() ->
+            Cons a (repeat a)
 
 
 {-| Append a list to another list.
 -}
 append : LazyList a -> LazyList a -> LazyList a
-append list1 list2 = lazy <| \() ->
-  case force list1 of
-    Nil -> force list2
-    Cons first rest ->
-      force (first ::: rest +++ list2)
+append list1 list2 =
+    lazy <|
+        \() ->
+            case force list1 of
+                Nil ->
+                    force list2
+
+                Cons first rest ->
+                    force (first ::: rest +++ list2)
 
 
 {-| Interleave the elements of a list in another list. The two lists get
 interleaved at the end.
 -}
 interleave : LazyList a -> LazyList a -> LazyList a
-interleave list1 list2 = lazy <| \() ->
-  case force list1 of
-    Nil ->
-      force list2
-    Cons first1 rest1 ->
-      case force list2 of
-        Nil ->
-          force list1
-        Cons first2 rest2 ->
-          force (first1 ::: first2 ::: interleave rest1 rest2)
+interleave list1 list2 =
+    lazy <|
+        \() ->
+            case force list1 of
+                Nil ->
+                    force list2
+
+                Cons first1 rest1 ->
+                    case force list2 of
+                        Nil ->
+                            force list1
+
+                        Cons first2 rest2 ->
+                            force (first1 ::: first2 ::: interleave rest1 rest2)
+
 
 {-| Places the given value between all members of the given list.
 -}
 intersperse : a -> LazyList a -> LazyList a
-intersperse a list = lazy <| \() ->
-  case force list of
-    Nil ->
-      Nil
+intersperse a list =
+    lazy <|
+        \() ->
+            case force list of
+                Nil ->
+                    Nil
 
-    Cons first rest ->
-      case force rest of
-        Nil ->
-          force (first ::: empty)
+                Cons first rest ->
+                    case force rest of
+                        Nil ->
+                            force (first ::: empty)
 
-        Cons second tail ->
-          case force tail of
-            Nil ->
-              force (first ::: a ::: second ::: empty)
+                        Cons second tail ->
+                            case force tail of
+                                Nil ->
+                                    force (first ::: a ::: second ::: empty)
 
-            _ ->
-              force (first ::: a ::: second ::: a ::: intersperse a tail)
-
-
+                                _ ->
+                                    force (first ::: a ::: second ::: a ::: intersperse a tail)
 
 
 {-| Take a list and repeat it ad infinitum. This cycles a finite list
@@ -172,9 +200,11 @@ the case of an infinite list.
 -}
 cycle : LazyList a -> LazyList a
 cycle list =
-  list +++ (lazy <| \() ->
-    force (cycle list)
-  )
+    list
+        +++ (lazy <|
+                \() ->
+                    force (cycle list)
+            )
 
 
 {-| Create an infinite list of applications of a function on some value.
@@ -184,8 +214,11 @@ Equivalent to:
     x ::: f x ::: f (f x) ::: f (f (f x)) ::: ... -- etc...
 -}
 iterate : (a -> a) -> a -> LazyList a
-iterate f a = lazy <| \() ->
-  Cons a (iterate f (f a))
+iterate f a =
+    lazy <|
+        \() ->
+            Cons a (iterate f (f a))
+
 
 {-| The list of counting numbers.
 
@@ -195,79 +228,87 @@ i.e.:
 -}
 numbers : LazyList number
 numbers =
-  iterate ((+) 1) 1
-
+    iterate ((+) 1) 1
 
 
 {-| Take at most `n` many values from a list.
 -}
 take : Int -> LazyList a -> LazyList a
-take n list = lazy <| \() ->
-  if n <= 0
-  then
-    Nil
-  else
-    case force list of
-      Nil -> Nil
-      Cons first rest ->
-        Cons first (take (n - 1) rest)
+take n list =
+    lazy <|
+        \() ->
+            if n <= 0 then
+                Nil
+            else
+                case force list of
+                    Nil ->
+                        Nil
 
-
+                    Cons first rest ->
+                        Cons first (take (n - 1) rest)
 
 
 {-| Take elements from a list as long as the predicate is satisfied.
 -}
 takeWhile : (a -> Bool) -> LazyList a -> LazyList a
-takeWhile predicate list = lazy <| \() ->
-  case force list of
-    Nil -> Nil
-    Cons first rest ->
-      if predicate first
-      then
-        Cons first (takeWhile predicate rest)
-      else
-        Nil
+takeWhile predicate list =
+    lazy <|
+        \() ->
+            case force list of
+                Nil ->
+                    Nil
 
+                Cons first rest ->
+                    if predicate first then
+                        Cons first (takeWhile predicate rest)
+                    else
+                        Nil
 
 
 {-| Drop at most `n` many values from a list.
 -}
 drop : Int -> LazyList a -> LazyList a
-drop n list = lazy <| \() ->
-  if n <= 0
-  then
-    force list
-  else
-    case force list of
-      Nil -> Nil
-      Cons first rest ->
-        force (drop (n - 1) rest)
+drop n list =
+    lazy <|
+        \() ->
+            if n <= 0 then
+                force list
+            else
+                case force list of
+                    Nil ->
+                        Nil
 
+                    Cons first rest ->
+                        force (drop (n - 1) rest)
 
 
 {-| Drop elements from a list as long as the predicate is satisfied.
 -}
 dropWhile : (a -> Bool) -> LazyList a -> LazyList a
-dropWhile predicate list = lazy <| \() ->
-  case force list of
-    Nil -> Nil
-    Cons first rest ->
-      if predicate first
-      then
-        force (dropWhile predicate rest)
-      else
-        force list
+dropWhile predicate list =
+    lazy <|
+        \() ->
+            case force list of
+                Nil ->
+                    Nil
 
+                Cons first rest ->
+                    if predicate first then
+                        force (dropWhile predicate rest)
+                    else
+                        force list
 
 
 {-| Test if a value is a member of a list.
 -}
 member : a -> LazyList a -> Bool
 member a list =
-  case force list of
-    Nil -> False
-    Cons first rest ->
-      first == a || member a rest
+    case force list of
+        Nil ->
+            False
+
+        Cons first rest ->
+            first == a || member a rest
 
 
 {-| Get the length of a lazy list.
@@ -276,46 +317,48 @@ Warning: This will not terminate if the list is infinite.
 -}
 length : LazyList a -> Int
 length =
-  reduce (\_ n -> n + 1) 0
-
+    reduce (\_ n -> n + 1) 0
 
 
 {-| Remove all duplicates from a list and return a list of distinct elements.
 -}
 unique : LazyList a -> LazyList a
-unique list = lazy <| \() ->
-  case force list of
-    Nil -> Nil
-    Cons first rest ->
-      if first `member` rest
-      then
-        force (unique rest)
-      else
-        Cons first (unique rest)
+unique list =
+    lazy <|
+        \() ->
+            case force list of
+                Nil ->
+                    Nil
 
+                Cons first rest ->
+                    if first `member` rest then
+                        force (unique rest)
+                    else
+                        Cons first (unique rest)
 
 
 {-| Keep all elements in a list that satisfy the given predicate.
 -}
 keepIf : (a -> Bool) -> LazyList a -> LazyList a
-keepIf predicate list = lazy <| \() ->
-  case force list of
-    Nil -> Nil
-    Cons first rest ->
-      if predicate first
-      then
-        Cons first (keepIf predicate rest)
-      else
-        force (keepIf predicate rest)
+keepIf predicate list =
+    lazy <|
+        \() ->
+            case force list of
+                Nil ->
+                    Nil
 
+                Cons first rest ->
+                    if predicate first then
+                        Cons first (keepIf predicate rest)
+                    else
+                        force (keepIf predicate rest)
 
 
 {-| Drop all elements in a list that satisfy the given predicate.
 -}
 dropIf : (a -> Bool) -> LazyList a -> LazyList a
 dropIf predicate =
-  keepIf (\n -> not (predicate n))
-
+    keepIf (\n -> not (predicate n))
 
 
 {-| Reduce a list with a given reducer and an initial value.
@@ -325,88 +368,108 @@ Example :
 -}
 reduce : (a -> b -> b) -> b -> LazyList a -> b
 reduce reducer b list =
-  case force list of
-    Nil -> b
-    Cons first rest ->
-      reduce reducer (reducer first b) rest
+    case force list of
+        Nil ->
+            b
+
+        Cons first rest ->
+            reduce reducer (reducer first b) rest
 
 
 {-| Analogous to `List.foldl`. Is an alias for `reduce`.
 -}
 foldl : (a -> b -> b) -> b -> LazyList a -> b
-foldl = reduce
+foldl =
+    reduce
 
 
 {-| Analogous to `List.foldr`.
 -}
 foldr : (a -> b -> b) -> b -> LazyList a -> b
 foldr reducer b list =
-  Array.foldr reducer b (toArray list)
+    Array.foldr reducer b (toArray list)
+
 
 {-| Get the sum of a list of numbers.
 -}
 sum : LazyList number -> number
 sum =
-  reduce (+) 0
+    reduce (+) 0
+
 
 {-| Get the product of a list of numbers.
 -}
 product : LazyList number -> number
 product =
-  reduce (*) 1
-
+    reduce (*) 1
 
 
 {-| Flatten a list of lists into a single list by appending all the inner
 lists into one big list.
 -}
 flatten : LazyList (LazyList a) -> LazyList a
-flatten list = lazy <| \() ->
-  case force list of
-    Nil -> Nil
-    Cons first rest ->
-      force (first +++ flatten rest)
+flatten list =
+    lazy <|
+        \() ->
+            case force list of
+                Nil ->
+                    Nil
+
+                Cons first rest ->
+                    force (first +++ flatten rest)
 
 
 {-| Map then flatten.
 -}
 flatMap : (a -> LazyList b) -> LazyList a -> LazyList b
 flatMap f =
-  map f >> flatten
+    map f >> flatten
+
 
 {-| Chain list producing operations.
 -}
 andThen : LazyList a -> (a -> LazyList b) -> LazyList b
 andThen =
-  flip flatMap
+    flip flatMap
 
 
 {-| Reverse a list.
 -}
 reverse : LazyList a -> LazyList a
 reverse =
-  reduce cons empty
+    reduce cons empty
 
 
 {-| Map a function to a list.
 -}
 map : (a -> b) -> LazyList a -> LazyList b
-map f list = lazy <| \() ->
-  case force list of
-    Nil -> Nil
-    Cons first rest ->
-      Cons (f first) (map f rest)
+map f list =
+    lazy <|
+        \() ->
+            case force list of
+                Nil ->
+                    Nil
 
-{-|-}
+                Cons first rest ->
+                    Cons (f first) (map f rest)
+
+
+{-| -}
 map2 : (a -> b -> c) -> LazyList a -> LazyList b -> LazyList c
-map2 f list1 list2 = lazy <| \() ->
-  case force list1 of
-    Nil -> Nil
-    Cons first1 rest1 ->
-      case force list2 of
-        Nil -> Nil
-        Cons first2 rest2 ->
-          Cons (f first1 first2) (map2 f rest1 rest2)
+map2 f list1 list2 =
+    lazy <|
+        \() ->
+            case force list1 of
+                Nil ->
+                    Nil
+
+                Cons first1 rest1 ->
+                    case force list2 of
+                        Nil ->
+                            Nil
+
+                        Cons first2 rest2 ->
+                            Cons (f first1 first2) (map2 f rest1 rest2)
 
 
 {-| Known as `mapN` in some circles. Allows you to apply `map` in cases
@@ -414,108 +477,122 @@ where then number of arguments are greater than 5.
 -}
 andMap : LazyList (a -> b) -> LazyList a -> LazyList b
 andMap =
-  map2 (<|)
+    map2 (<|)
 
-{-|-}
+
+{-| -}
 map3 : (a -> b -> c -> d) -> LazyList a -> LazyList b -> LazyList c -> LazyList d
 map3 f l1 l2 l3 =
-  f
-    `map` l1
-    `andMap` l2
-    `andMap` l3
+    f
+        `map` l1
+        `andMap` l2
+        `andMap` l3
 
-{-|-}
+
+{-| -}
 map4 : (a -> b -> c -> d -> e) -> LazyList a -> LazyList b -> LazyList c -> LazyList d -> LazyList e
 map4 f l1 l2 l3 l4 =
-  f
-    `map` l1
-    `andMap` l2
-    `andMap` l3
-    `andMap` l4
+    f
+        `map` l1
+        `andMap` l2
+        `andMap` l3
+        `andMap` l4
 
-{-|-}
+
+{-| -}
 map5 : (a -> b -> c -> d -> e -> f) -> LazyList a -> LazyList b -> LazyList c -> LazyList d -> LazyList e -> LazyList f
 map5 f l1 l2 l3 l4 l5 =
-  f
-    `map`    l1
-    `andMap` l2
-    `andMap` l3
-    `andMap` l4
-    `andMap` l5
+    f
+        `map` l1
+        `andMap` l2
+        `andMap` l3
+        `andMap` l4
+        `andMap` l5
 
-{-|-}
-zip : LazyList a -> LazyList b -> LazyList (a, b)
+
+{-| -}
+zip : LazyList a -> LazyList b -> LazyList ( a, b )
 zip =
-  map2 (,)
+    map2 (,)
 
-{-|-}
-zip3 : LazyList a -> LazyList b -> LazyList c -> LazyList (a, b, c)
+
+{-| -}
+zip3 : LazyList a -> LazyList b -> LazyList c -> LazyList ( a, b, c )
 zip3 =
-  map3 (,,)
+    map3 (,,)
 
-{-|-}
-zip4 : LazyList a -> LazyList b -> LazyList c -> LazyList d -> LazyList (a, b, c, d)
+
+{-| -}
+zip4 : LazyList a -> LazyList b -> LazyList c -> LazyList d -> LazyList ( a, b, c, d )
 zip4 =
-  map4 (,,,)
+    map4 (,,,)
 
-{-|-}
-zip5 : LazyList a -> LazyList b -> LazyList c -> LazyList d -> LazyList e -> LazyList (a, b, c, d, e)
+
+{-| -}
+zip5 : LazyList a -> LazyList b -> LazyList c -> LazyList d -> LazyList e -> LazyList ( a, b, c, d, e )
 zip5 =
-  map5 (,,,,)
-
+    map5 (,,,,)
 
 
 {-| Convert a lazy list to a normal list.
 -}
 toList : LazyList a -> List a
 toList list =
-  case force list of
-    Nil -> []
-    Cons first rest ->
-      first :: toList rest
+    case force list of
+        Nil ->
+            []
+
+        Cons first rest ->
+            first :: toList rest
 
 
 {-| Convert a normal list to a lazy list.
 -}
 fromList : List a -> LazyList a
 fromList =
-  List.foldr cons empty
+    List.foldr cons empty
 
 
 {-| Convert a lazy list to an array.
 -}
 toArray : LazyList a -> Array a
 toArray list =
-  case force list of
-    Nil -> Array.empty
-    Cons first rest ->
-      Array.append (Array.push first Array.empty) (toArray rest)
+    case force list of
+        Nil ->
+            Array.empty
+
+        Cons first rest ->
+            Array.append (Array.push first Array.empty) (toArray rest)
 
 
 {-| Convert an array to a lazy list.
 -}
 fromArray : Array a -> LazyList a
 fromArray =
-  Array.foldr cons empty
+    Array.foldr cons empty
+
 
 
 ---------------------
 -- INFIX OPERATORS --
 ---------------------
 
+
 infixr 5 :::
+
 
 {-| Alias for `cons`. Analogous to `::` for lists.
 -}
 (:::) : a -> LazyList a -> LazyList a
 (:::) =
-  cons
+    cons
 
 
 infixr 5 +++
+
 
 {-| Alias for `append`. Analogous to `++` for lists.
 -}
 (+++) : LazyList a -> LazyList a -> LazyList a
 (+++) =
-  append
+    append
