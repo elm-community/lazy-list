@@ -9,7 +9,7 @@ module Lazy.List exposing (..)
 @docs cons, empty, singleton
 
 # Query operations
-@docs isEmpty, head, tail, member, length
+@docs isEmpty, head, tail, headAndTail, member, length
 
 # Conversions
 @docs toList, fromList, toArray, fromArray
@@ -121,6 +121,18 @@ tail list =
 
         Cons _ rest ->
             Just rest
+
+
+{-| Get the head and tail of a list.
+-}
+headAndTail : LazyList a -> Maybe ( a, LazyList a )
+headAndTail list =
+    case force list of
+        Nil ->
+            Nothing
+
+        Cons first rest ->
+            Just ( first, rest )
 
 
 {-| Repeat a value ad infinitum.
