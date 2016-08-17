@@ -21,7 +21,7 @@ module Lazy.List exposing (..)
 @docs intersperse, interleave, reverse, cycle, iterate, repeat, take, takeWhile, drop, dropWhile
 
 # Filtering operations
-@docs keepIf, dropIf, unique
+@docs keepIf, dropIf, filterMap, unique
 
 # Chaining operations
 @docs andMap, andThen
@@ -371,6 +371,26 @@ keepIf predicate list =
 dropIf : (a -> Bool) -> LazyList a -> LazyList a
 dropIf predicate =
     keepIf (\n -> not (predicate n))
+
+
+{-| Map a function that may fail over a lazy list, keeping only
+the values that were successfully transformed.
+-}
+filterMap : (a -> Maybe b) -> LazyList a -> LazyList b
+filterMap transform list =
+    lazy <|
+        \() ->
+            case force list of
+                Nil ->
+                    Nil
+
+                Cons first rest ->
+                    case transform first of
+                        Just val ->
+                            Cons val (filterMap transform rest)
+
+                        Nothing ->
+                            force (filterMap transform rest)
 
 
 {-| Reduce a list with a given reducer and an initial value.
