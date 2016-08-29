@@ -26,7 +26,7 @@ module Lazy.List exposing (..)
 # Chaining operations
 @docs andMap, andThen
 
-# Useful stuff
+# Useful math stuff
 @docs numbers, sum, product
 
 # All the maps!
@@ -34,6 +34,12 @@ module Lazy.List exposing (..)
 
 # All the zips!
 @docs zip3, zip4, zip5
+
+# All the Cartesian products!
+**Warning:** Calling these functions on large lists and then calling `toList` can easily overflow the stack. Consider
+passing the results to `take aConstantNumber`.
+
+@docs product2, product3, product4, product5
 
 # Infix Operators
 @docs (:::), (+++)
@@ -232,7 +238,7 @@ iterate f a =
             Cons a (iterate f (f a))
 
 
-{-| The list of counting numbers.
+{-| The infinite list of counting numbers.
 
 i.e.:
 
@@ -564,6 +570,67 @@ zip4 =
 zip5 : LazyList a -> LazyList b -> LazyList c -> LazyList d -> LazyList e -> LazyList ( a, b, c, d, e )
 zip5 =
     map5 (,,,,)
+
+
+{-| Create a lazy list containing all possible pairs in the given lazy lists.
+-}
+product2 : LazyList a -> LazyList b -> LazyList ( a, b )
+product2 list1 list2 =
+    lazy <|
+        \() ->
+            case force list1 of
+                Nil ->
+                    Nil
+
+                Cons first1 rest1 ->
+                    case force list2 of
+                        Nil ->
+                            Nil
+
+                        Cons _ _ ->
+                            force <| map ((,) first1) list2 +++ product2 rest1 list2
+
+
+{-| Create a lazy list containing all possible triples in the given lazy lists.
+-}
+product3 : LazyList a -> LazyList b -> LazyList c -> LazyList ( a, b, c )
+product3 list1 list2 list3 =
+    lazy <|
+        \() ->
+            case force list1 of
+                Nil ->
+                    Nil
+
+                Cons first1 rest1 ->
+                    force <| map (\( b, c ) -> ( first1, b, c )) (product2 list2 list3) +++ product3 rest1 list2 list3
+
+
+{-| Create a lazy list containing all possible 4-tuples in the given lazy lists.
+-}
+product4 : LazyList a -> LazyList b -> LazyList c -> LazyList d -> LazyList ( a, b, c, d )
+product4 list1 list2 list3 list4 =
+    lazy <|
+        \() ->
+            case force list1 of
+                Nil ->
+                    Nil
+
+                Cons first1 rest1 ->
+                    force <| map (\( b, c, d ) -> ( first1, b, c, d )) (product3 list2 list3 list4) +++ product4 rest1 list2 list3 list4
+
+
+{-| Create a lazy list containing all possible 5-tuples in the given lazy lists.
+-}
+product5 : LazyList a -> LazyList b -> LazyList c -> LazyList d -> LazyList e -> LazyList ( a, b, c, d, e )
+product5 list1 list2 list3 list4 list5 =
+    lazy <|
+        \() ->
+            case force list1 of
+                Nil ->
+                    Nil
+
+                Cons first1 rest1 ->
+                    force <| map (\( b, c, d, e ) -> ( first1, b, c, d, e )) (product4 list2 list3 list4 list5) +++ product5 rest1 list2 list3 list4 list5
 
 
 {-| Convert a lazy list to a normal list.
