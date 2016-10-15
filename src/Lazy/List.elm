@@ -15,7 +15,7 @@ module Lazy.List exposing (..)
 @docs toList, fromList, toArray, fromArray
 
 # Map-reduce et al.
-@docs map, zip, reduce, flatten, flatMap, append, foldl, foldr
+@docs map, zip, reduce, flatten, append, foldl, foldr
 
 # Common operations
 @docs intersperse, interleave, reverse, cycle, iterate, repeat, take, takeWhile, drop, dropWhile
@@ -349,7 +349,7 @@ unique list =
                     Nil
 
                 Cons first rest ->
-                    if first `member` rest then
+                    if member first rest then
                         force (unique rest)
                     else
                         Cons first (unique rest)
@@ -457,18 +457,11 @@ flatten list =
                     force (first +++ flatten rest)
 
 
-{-| Map then flatten.
+{-| Chain list producing operations. Map then flatten.
 -}
-flatMap : (a -> LazyList b) -> LazyList a -> LazyList b
-flatMap f =
-    map f >> flatten
-
-
-{-| Chain list producing operations.
--}
-andThen : LazyList a -> (a -> LazyList b) -> LazyList b
-andThen =
-    flip flatMap
+andThen : (a -> LazyList b) -> LazyList a -> LazyList b
+andThen f list =
+    map f list |> flatten
 
 
 {-| Reverse a list.
@@ -512,40 +505,98 @@ map2 f list1 list2 =
 
 {-| Known as `mapN` in some circles. Allows you to apply `map` in cases
 where then number of arguments are greater than 5.
+
+The argument order is such that it works well with `|>` chains.
 -}
-andMap : LazyList (a -> b) -> LazyList a -> LazyList b
-andMap =
-    map2 (<|)
+andMap : LazyList a -> LazyList (a -> b) -> LazyList b
+andMap listVal listFuncs =
+    map2 (<|) listFuncs listVal
 
 
 {-| -}
 map3 : (a -> b -> c -> d) -> LazyList a -> LazyList b -> LazyList c -> LazyList d
-map3 f l1 l2 l3 =
-    f
-        `map` l1
-        `andMap` l2
-        `andMap` l3
+map3 f list1 list2 list3 =
+    lazy <|
+        \() ->
+            case force list1 of
+                Nil ->
+                    Nil
+
+                Cons first1 rest1 ->
+                    case force list2 of
+                        Nil ->
+                            Nil
+
+                        Cons first2 rest2 ->
+                            case force list3 of
+                                Nil ->
+                                    Nil
+
+                                Cons first3 rest3 ->
+                                    Cons (f first1 first2 first3) (map3 f rest1 rest2 rest3)
 
 
 {-| -}
 map4 : (a -> b -> c -> d -> e) -> LazyList a -> LazyList b -> LazyList c -> LazyList d -> LazyList e
-map4 f l1 l2 l3 l4 =
-    f
-        `map` l1
-        `andMap` l2
-        `andMap` l3
-        `andMap` l4
+map4 f list1 list2 list3 list4 =
+    lazy <|
+        \() ->
+            case force list1 of
+                Nil ->
+                    Nil
+
+                Cons first1 rest1 ->
+                    case force list2 of
+                        Nil ->
+                            Nil
+
+                        Cons first2 rest2 ->
+                            case force list3 of
+                                Nil ->
+                                    Nil
+
+                                Cons first3 rest3 ->
+                                    case force list4 of
+                                        Nil ->
+                                            Nil
+
+                                        Cons first4 rest4 ->
+                                            Cons (f first1 first2 first3 first4) (map4 f rest1 rest2 rest3 rest4)
 
 
 {-| -}
 map5 : (a -> b -> c -> d -> e -> f) -> LazyList a -> LazyList b -> LazyList c -> LazyList d -> LazyList e -> LazyList f
-map5 f l1 l2 l3 l4 l5 =
-    f
-        `map` l1
-        `andMap` l2
-        `andMap` l3
-        `andMap` l4
-        `andMap` l5
+map5 f list1 list2 list3 list4 list5 =
+    lazy <|
+        \() ->
+            case force list1 of
+                Nil ->
+                    Nil
+
+                Cons first1 rest1 ->
+                    case force list2 of
+                        Nil ->
+                            Nil
+
+                        Cons first2 rest2 ->
+                            case force list3 of
+                                Nil ->
+                                    Nil
+
+                                Cons first3 rest3 ->
+                                    case force list4 of
+                                        Nil ->
+                                            Nil
+
+                                        Cons first4 rest4 ->
+                                            case force list5 of
+                                                Nil ->
+                                                    Nil
+
+                                                Cons first5 rest5 ->
+                                                    Cons
+                                                        (f first1 first2 first3 first4 first5)
+                                                        (map5 f rest1 rest2 rest3 rest4 rest5)
 
 
 {-| -}
