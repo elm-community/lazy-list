@@ -3,7 +3,7 @@ module Lazy.List exposing (..)
 {-| Lazy list implementation in Elm.
 
 # Types
-@docs LazyList, LazyListView
+@docs LazyList, LazyListView, listHelper
 
 # Constructors
 @docs cons, empty, singleton
@@ -688,12 +688,26 @@ product5 list1 list2 list3 list4 list5 =
 -}
 toList : LazyList a -> List a
 toList list =
-    case force list of
-        Nil ->
-            []
+     List.reverse <| listHelper list []
 
-        Cons first rest ->
-            first :: toList rest
+
+{-| Helper funtion that takes advantage of tail call optimization.
+   TODO Currently, everything is exposed in this module. Is it best to start
+   explicitly naming things to expose? This isn't something that should be exposed
+   as part of this module.
+-}
+listHelper : LazyList a -> List a -> List a
+listHelper lazyList acc =
+    case (tail lazyList) of
+        Nothing ->
+            acc
+
+        Just restLazyList ->
+            case (head lazyList) of
+                Nothing ->
+                    listHelper restLazyList acc
+                Just a ->
+                    listHelper restLazyList (a :: acc)
 
 
 {-| Convert a normal list to a lazy list.
