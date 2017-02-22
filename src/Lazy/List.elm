@@ -1,748 +1,229 @@
-module Lazy.List exposing (..)
+module Lazy
+    exposing
+        ( Lazy
+        , force
+        , lazy
+        , lazyFromValue
+        , map
+        , map2
+        , map3
+        , map4
+        , map5
+        , apply
+        , andThen
+        , fix
+        )
 
-{-| Lazy list implementation in Elm.
+{-| This library lets you delay a computation until later.
 
-# Types
-@docs LazyList, LazyListView
+# Basics
+@docs Lazy, lazy, lazyFromValue, force
 
-# Constructors
-@docs cons, empty, singleton
+# Mapping
+@docs map, map2, map3, map4, map5
 
-# Query operations
-@docs isEmpty, head, tail, headAndTail, member, length
+# Chaining
+@docs apply, andThen
 
-# Conversions
-@docs toList, fromList, toArray, fromArray
-
-# Map-reduce et al.
-@docs map, zip, reduce, flatten, append, foldl, foldr
-
-# Common operations
-@docs intersperse, interleave, reverse, cycle, iterate, repeat, take, takeWhile, drop, dropWhile
-
-# Filtering operations
-@docs keepIf, dropIf, filterMap, unique
-
-# Chaining operations
-@docs andMap, andThen
-
-# Useful math stuff
-@docs numbers, sum, product
-
-# All the maps!
-@docs map2, map3, map4, map5
-
-# All the zips!
-@docs zip3, zip4, zip5
-
-# All the Cartesian products!
-**Warning:** Calling these functions on large lists and then calling `toList` can easily overflow the stack. Consider
-passing the results to `take aConstantNumber`.
-
-@docs product2, product3, product4, product5
-
-# Infix Operators
-@docs (:::), (+++)
-
+# Recursion
+@docs fix
 -}
 
-import Array exposing (Array)
-import List
-import Random exposing (Generator, Seed)
-import Lazy exposing (Lazy, lazy, force)
+import Native.Lazy
 
 
-{-| Analogous to `List` type. This is the actual implementation type for the
-`LazyList` type. This type is exposed to the user if the user so wishes to
-do pattern matching or understand how the list type works. It is not
-recommended to work with this type directly. Try working solely with the
-provided functions in the package.
+-- PRIMITIVES
+
+
+{-| A wrapper around a value that will be lazily evaluated.
 -}
-type LazyListView a
-    = Nil
-    | Cons a (LazyList a)
+type Lazy a
+    = Evaluated a
+    | Unevaluated (() -> a)
 
 
-{-| Lazy List type.
+{-| Delay the evaluation of a value until later. For example, maybe we will
+need to generate a very long list and find its sum, but we do not want to do
+it unless it is absolutely necessary.
+
+    lazySum : Lazy Int
+    lazySum =
+        lazy (\() -> sum [1..1000000])
+
+Now we only pay for `lazySum` if we actually need it.
 -}
-type alias LazyList a =
-    Lazy (LazyListView a)
+lazy : (() -> a) -> Lazy a
+lazy thunk =
+    Native.Lazy.lazy thunk
 
 
-{-| Create an empty list.
+{-| `lazyFromValue' Sets the created Lazy a to an already evaluated value.
+For example, maybe we want to set the tail of a lazy list to an Empty node so
+there is no need to defer the calculation as it is a simple constant:
+
+    type LazyList a = Empty | Cons a (Lazy (LazyList a))
+    shortLazyList : LazyList Int
+    shortLazyList =
+      Cons 1 <| lazyFromValue Empty
+
+Now the tail of the shortLazyList is immediately available to
+force without calling an evaluation functtion.
 -}
-empty : LazyList a
-empty =
-    lazy <|
-        \() -> Nil
+lazyFromValue : a -> Lazy a
+lazyFromValue v =
+    Native.Lazy.lazyFromValue v
 
 
-{-| Create a singleton list.
+{-| Force the evaluation of a lazy value. This means we only pay for the
+computation when we need it. Here is a rather contrived example.
+
+    lazySum : Lazy Int
+    lazySum =
+        lazy (\() -> List.sum [1..1000000])
+    sums : (Int, Int, Int)
+    sums =
+        (force lazySum, force lazySum, force lazySum)
+
+We are forcing this computation three times. The cool thing is that the first
+time you `force` a value, the result is stored. This means you pay the cost on
+the first one, but all the rest are very cheap, basically just looking up a
+value in memory.
 -}
-singleton : a -> LazyList a
-singleton a =
-    cons a empty
+force : Lazy a -> a
+force (Lazy thunk) =
+    thunk ()
 
 
-{-| Detect if a list is empty or not.
+
+-- COMPOSING LAZINESS
+
+
+{-| Lazily apply a function to a lazy value.
+
+    lazySum : Lazy Int
+    lazySum =
+        map List.sum (lazy (\() -> [1..1000000]))
+
+The resulting lazy value will create a big list and sum it up when it is
+finally forced.
 -}
-isEmpty : LazyList a -> Bool
-isEmpty list =
-    case force list of
-        Nil ->
-            True
-
-        _ ->
-            False
+map : (a -> b) -> Lazy a -> Lazy b
+map f a =
+    lazy (\() -> f (force a))
 
 
-{-| Add a value to the front of a list.
+{-| Lazily apply a function to two lazy values.
+
+    lazySum : Lazy Int
+    lazySum =
+        lazy (\() -> List.sum [1..1000000])
+    lazySumPair : Lazy (Int, Int)
+    lazySumPair =
+        map2 (,) lazySum lazySum
 -}
-cons : a -> LazyList a -> LazyList a
-cons a list =
-    lazy <|
-        \() ->
-            Cons a list
-
-
-{-| Get the head of a list.
--}
-head : LazyList a -> Maybe a
-head list =
-    case force list of
-        Nil ->
-            Nothing
-
-        Cons first _ ->
-            Just first
-
-
-{-| Get the tail of a list.
--}
-tail : LazyList a -> Maybe (LazyList a)
-tail list =
-    case force list of
-        Nil ->
-            Nothing
-
-        Cons _ rest ->
-            Just rest
-
-
-{-| Get the head and tail of a list.
--}
-headAndTail : LazyList a -> Maybe ( a, LazyList a )
-headAndTail list =
-    case force list of
-        Nil ->
-            Nothing
-
-        Cons first rest ->
-            Just ( first, rest )
-
-
-{-| Repeat a value ad infinitum.
-Be careful when you use this. The result of this is a truly infinite list.
-Do not try calling `reduce` or `toList` on an infinite list as it'll never
-finish computing. Make sure you then filter it down to a finite list with `head`
-or `take` or something.
--}
-repeat : a -> LazyList a
-repeat a =
-    lazy <|
-        \() ->
-            Cons a (repeat a)
-
-
-{-| Append a list to another list.
--}
-append : LazyList a -> LazyList a -> LazyList a
-append list1 list2 =
-    lazy <|
-        \() ->
-            case force list1 of
-                Nil ->
-                    force list2
-
-                Cons first rest ->
-                    force (first ::: rest +++ list2)
-
-
-{-| Interleave the elements of a list in another list. The two lists get
-interleaved at the end.
--}
-interleave : LazyList a -> LazyList a -> LazyList a
-interleave list1 list2 =
-    lazy <|
-        \() ->
-            case force list1 of
-                Nil ->
-                    force list2
-
-                Cons first1 rest1 ->
-                    case force list2 of
-                        Nil ->
-                            force list1
-
-                        Cons first2 rest2 ->
-                            force (first1 ::: first2 ::: interleave rest1 rest2)
-
-
-{-| Places the given value between all members of the given list.
--}
-intersperse : a -> LazyList a -> LazyList a
-intersperse a list =
-    lazy <|
-        \() ->
-            case force list of
-                Nil ->
-                    Nil
-
-                Cons first rest ->
-                    case force rest of
-                        Nil ->
-                            force (first ::: empty)
-
-                        Cons second tail ->
-                            case force tail of
-                                Nil ->
-                                    force (first ::: a ::: second ::: empty)
-
-                                _ ->
-                                    force (first ::: a ::: second ::: a ::: intersperse a tail)
-
-
-{-| Take a list and repeat it ad infinitum. This cycles a finite list
-by putting the front after the end of the list. This results in a no-op in
-the case of an infinite list.
--}
-cycle : LazyList a -> LazyList a
-cycle list =
-    list
-        +++ (lazy <|
-                \() ->
-                    force (cycle list)
-            )
-
-
-{-| Create an infinite list of applications of a function on some value.
-
-Equivalent to:
-
-    x ::: f x ::: f (f x) ::: f (f (f x)) ::: ... -- etc...
--}
-iterate : (a -> a) -> a -> LazyList a
-iterate f a =
-    lazy <|
-        \() ->
-            Cons a (iterate f (f a))
-
-
-{-| The infinite list of counting numbers.
-
-i.e.:
-
-    1 ::: 2 ::: 3 ::: 4 ::: 5 ::: ... -- etc...
--}
-numbers : LazyList number
-numbers =
-    iterate ((+) 1) 1
-
-
-{-| Take at most `n` many values from a list.
--}
-take : Int -> LazyList a -> LazyList a
-take n list =
-    lazy <|
-        \() ->
-            if n <= 0 then
-                Nil
-            else
-                case force list of
-                    Nil ->
-                        Nil
-
-                    Cons first rest ->
-                        Cons first (take (n - 1) rest)
-
-
-{-| Take elements from a list as long as the predicate is satisfied.
--}
-takeWhile : (a -> Bool) -> LazyList a -> LazyList a
-takeWhile predicate list =
-    lazy <|
-        \() ->
-            case force list of
-                Nil ->
-                    Nil
-
-                Cons first rest ->
-                    if predicate first then
-                        Cons first (takeWhile predicate rest)
-                    else
-                        Nil
-
-
-{-| Drop at most `n` many values from a list.
--}
-drop : Int -> LazyList a -> LazyList a
-drop n list =
-    lazy <|
-        \() ->
-            if n <= 0 then
-                force list
-            else
-                case force list of
-                    Nil ->
-                        Nil
-
-                    Cons first rest ->
-                        force (drop (n - 1) rest)
-
-
-{-| Drop elements from a list as long as the predicate is satisfied.
--}
-dropWhile : (a -> Bool) -> LazyList a -> LazyList a
-dropWhile predicate list =
-    lazy <|
-        \() ->
-            case force list of
-                Nil ->
-                    Nil
-
-                Cons first rest ->
-                    if predicate first then
-                        force (dropWhile predicate rest)
-                    else
-                        force list
-
-
-{-| Test if a value is a member of a list.
--}
-member : a -> LazyList a -> Bool
-member a list =
-    case force list of
-        Nil ->
-            False
-
-        Cons first rest ->
-            first == a || member a rest
-
-
-{-| Get the length of a lazy list.
-
-Warning: This will not terminate if the list is infinite.
--}
-length : LazyList a -> Int
-length =
-    reduce (\_ n -> n + 1) 0
-
-
-{-| Remove all duplicates from a list and return a list of distinct elements.
--}
-unique : LazyList a -> LazyList a
-unique list =
-    lazy <|
-        \() ->
-            case force list of
-                Nil ->
-                    Nil
-
-                Cons first rest ->
-                    if member first rest then
-                        force (unique rest)
-                    else
-                        Cons first (unique rest)
-
-
-{-| Keep all elements in a list that satisfy the given predicate.
--}
-keepIf : (a -> Bool) -> LazyList a -> LazyList a
-keepIf predicate list =
-    lazy <|
-        \() ->
-            case force list of
-                Nil ->
-                    Nil
-
-                Cons first rest ->
-                    if predicate first then
-                        Cons first (keepIf predicate rest)
-                    else
-                        force (keepIf predicate rest)
-
-
-{-| Drop all elements in a list that satisfy the given predicate.
--}
-dropIf : (a -> Bool) -> LazyList a -> LazyList a
-dropIf predicate =
-    keepIf (\n -> not (predicate n))
-
-
-{-| Map a function that may fail over a lazy list, keeping only
-the values that were successfully transformed.
--}
-filterMap : (a -> Maybe b) -> LazyList a -> LazyList b
-filterMap transform list =
-    lazy <|
-        \() ->
-            case force list of
-                Nil ->
-                    Nil
-
-                Cons first rest ->
-                    case transform first of
-                        Just val ->
-                            Cons val (filterMap transform rest)
-
-                        Nothing ->
-                            force (filterMap transform rest)
-
-
-{-| Reduce a list with a given reducer and an initial value.
-
-Example :
-    reduce (+) 0 (1 ::: 2 ::: 3 ::: 4 ::: empty) == 10
--}
-reduce : (a -> b -> b) -> b -> LazyList a -> b
-reduce reducer b list =
-    case force list of
-        Nil ->
-            b
-
-        Cons first rest ->
-            reduce reducer (reducer first b) rest
-
-
-{-| Analogous to `List.foldl`. Is an alias for `reduce`.
--}
-foldl : (a -> b -> b) -> b -> LazyList a -> b
-foldl =
-    reduce
-
-
-{-| Analogous to `List.foldr`.
--}
-foldr : (a -> b -> b) -> b -> LazyList a -> b
-foldr reducer b list =
-    Array.foldr reducer b (toArray list)
-
-
-{-| Get the sum of a list of numbers.
--}
-sum : LazyList number -> number
-sum =
-    reduce (+) 0
-
-
-{-| Get the product of a list of numbers.
--}
-product : LazyList number -> number
-product =
-    reduce (*) 1
-
-
-{-| Flatten a list of lists into a single list by appending all the inner
-lists into one big list.
--}
-flatten : LazyList (LazyList a) -> LazyList a
-flatten list =
-    lazy <|
-        \() ->
-            case force list of
-                Nil ->
-                    Nil
-
-                Cons first rest ->
-                    force (first +++ flatten rest)
-
-
-{-| Chain list producing operations. Map then flatten.
--}
-andThen : (a -> LazyList b) -> LazyList a -> LazyList b
-andThen f list =
-    map f list |> flatten
-
-
-{-| Reverse a list.
--}
-reverse : LazyList a -> LazyList a
-reverse =
-    reduce cons empty
-
-
-{-| Map a function to a list.
--}
-map : (a -> b) -> LazyList a -> LazyList b
-map f list =
-    lazy <|
-        \() ->
-            case force list of
-                Nil ->
-                    Nil
-
-                Cons first rest ->
-                    Cons (f first) (map f rest)
+map2 : (a -> b -> result) -> Lazy a -> Lazy b -> Lazy result
+map2 f a b =
+    lazy (\() -> f (force a) (force b))
 
 
 {-| -}
-map2 : (a -> b -> c) -> LazyList a -> LazyList b -> LazyList c
-map2 f list1 list2 =
-    lazy <|
-        \() ->
-            case force list1 of
-                Nil ->
-                    Nil
-
-                Cons first1 rest1 ->
-                    case force list2 of
-                        Nil ->
-                            Nil
-
-                        Cons first2 rest2 ->
-                            Cons (f first1 first2) (map2 f rest1 rest2)
-
-
-{-| Known as `mapN` in some circles. Allows you to apply `map` in cases
-where then number of arguments are greater than 5.
-
-The argument order is such that it works well with `|>` chains.
--}
-andMap : LazyList a -> LazyList (a -> b) -> LazyList b
-andMap listVal listFuncs =
-    map2 (<|) listFuncs listVal
+map3 : (a -> b -> c -> result) -> Lazy a -> Lazy b -> Lazy c -> Lazy result
+map3 f a b c =
+    lazy (\() -> f (force a) (force b) (force c))
 
 
 {-| -}
-map3 : (a -> b -> c -> d) -> LazyList a -> LazyList b -> LazyList c -> LazyList d
-map3 f list1 list2 list3 =
-    lazy <|
-        \() ->
-            case force list1 of
-                Nil ->
-                    Nil
-
-                Cons first1 rest1 ->
-                    case force list2 of
-                        Nil ->
-                            Nil
-
-                        Cons first2 rest2 ->
-                            case force list3 of
-                                Nil ->
-                                    Nil
-
-                                Cons first3 rest3 ->
-                                    Cons (f first1 first2 first3) (map3 f rest1 rest2 rest3)
+map4 : (a -> b -> c -> d -> result) -> Lazy a -> Lazy b -> Lazy c -> Lazy d -> Lazy result
+map4 f a b c d =
+    lazy (\() -> f (force a) (force b) (force c) (force d))
 
 
 {-| -}
-map4 : (a -> b -> c -> d -> e) -> LazyList a -> LazyList b -> LazyList c -> LazyList d -> LazyList e
-map4 f list1 list2 list3 list4 =
-    lazy <|
-        \() ->
-            case force list1 of
-                Nil ->
-                    Nil
-
-                Cons first1 rest1 ->
-                    case force list2 of
-                        Nil ->
-                            Nil
-
-                        Cons first2 rest2 ->
-                            case force list3 of
-                                Nil ->
-                                    Nil
-
-                                Cons first3 rest3 ->
-                                    case force list4 of
-                                        Nil ->
-                                            Nil
-
-                                        Cons first4 rest4 ->
-                                            Cons (f first1 first2 first3 first4) (map4 f rest1 rest2 rest3 rest4)
+map5 : (a -> b -> c -> d -> e -> result) -> Lazy a -> Lazy b -> Lazy c -> Lazy d -> Lazy e -> Lazy result
+map5 f a b c d e =
+    lazy (\() -> f (force a) (force b) (force c) (force d) (force e))
 
 
-{-| -}
-map5 : (a -> b -> c -> d -> e -> f) -> LazyList a -> LazyList b -> LazyList c -> LazyList d -> LazyList e -> LazyList f
-map5 f list1 list2 list3 list4 list5 =
-    lazy <|
-        \() ->
-            case force list1 of
-                Nil ->
-                    Nil
+{-| Lazily apply a lazy function to a lazy value. This is pretty rare on its
+own, but it lets you map as high as you want.
 
-                Cons first1 rest1 ->
-                    case force list2 of
-                        Nil ->
-                            Nil
+    map3 f a b == f `map` a `apply` b `apply` c
 
-                        Cons first2 rest2 ->
-                            case force list3 of
-                                Nil ->
-                                    Nil
-
-                                Cons first3 rest3 ->
-                                    case force list4 of
-                                        Nil ->
-                                            Nil
-
-                                        Cons first4 rest4 ->
-                                            case force list5 of
-                                                Nil ->
-                                                    Nil
-
-                                                Cons first5 rest5 ->
-                                                    Cons
-                                                        (f first1 first2 first3 first4 first5)
-                                                        (map5 f rest1 rest2 rest3 rest4 rest5)
-
-
-{-| -}
-zip : LazyList a -> LazyList b -> LazyList ( a, b )
-zip =
-    map2 (,)
-
-
-{-| -}
-zip3 : LazyList a -> LazyList b -> LazyList c -> LazyList ( a, b, c )
-zip3 =
-    map3 (,,)
-
-
-{-| -}
-zip4 : LazyList a -> LazyList b -> LazyList c -> LazyList d -> LazyList ( a, b, c, d )
-zip4 =
-    map4 (,,,)
-
-
-{-| -}
-zip5 : LazyList a -> LazyList b -> LazyList c -> LazyList d -> LazyList e -> LazyList ( a, b, c, d, e )
-zip5 =
-    map5 (,,,,)
-
-
-{-| Create a lazy list containing all possible pairs in the given lazy lists.
+It is not the most beautiful, but it is equivalent and will let you create
+`map9` quite easily if you really need it.
 -}
-product2 : LazyList a -> LazyList b -> LazyList ( a, b )
-product2 list1 list2 =
-    lazy <|
-        \() ->
-            case force list1 of
-                Nil ->
-                    Nil
-
-                Cons first1 rest1 ->
-                    case force list2 of
-                        Nil ->
-                            Nil
-
-                        Cons _ _ ->
-                            force <| map ((,) first1) list2 +++ product2 rest1 list2
+apply : Lazy (a -> b) -> Lazy a -> Lazy b
+apply f x =
+    lazy (\() -> (force f) (force x))
 
 
-{-| Create a lazy list containing all possible triples in the given lazy lists.
+{-| Lazily chain together lazy computations, for when you have a series of
+steps that all need to be performed lazily. This can be nice when you need to
+pattern match on a value, for example, when appending lazy lists:
+
+    type LazyList a = Empty | Cons a (Lazy (LazyList a))
+    cons : a -> Lazy (LazyList a) -> Lazy (LazyList a)
+    cons v lazylist =
+      Lazy.map (\x -> Cons v <| lazy (\() -> x)) lazylist
+    append : Lazy (LazyList a) -> Lazy (LazyList a) -> Lazy (LazyList a)
+    append list1 list2 =
+      let
+        appendi lazylist1 =
+          let appendHelp ll1 =
+            case ll1 of
+              Empty -> list2
+              Cons first rest ->
+                cons first (appendi rest)
+          in
+            lazylist1 |> Lazy.andThen appendHelp
+      in appendi list1
+
+By using `andThen` we ensure that neither `lazyList1` nor `lazyList2` are forced
+before they are needed. So as written, the `append` function delays the pattern
+matching until later.
+Note that although this is the way to write `cons' and `append' for a `Lazy (Lazylist a)`
+so as to avoid "The Halting Problem" and make infinite lazy lists possible inside the wrapper,
+which would otherwise cause stack overflow (or detection and an exception thrown),
+the extra level of laziness of the outer `Lazy' wrapper costs much in terms of performance
+due to the number of force/thunk/lazy chains of function calls/composition needed.
 -}
-product3 : LazyList a -> LazyList b -> LazyList c -> LazyList ( a, b, c )
-product3 list1 list2 list3 =
-    lazy <|
-        \() ->
-            case force list1 of
-                Nil ->
-                    Nil
-
-                Cons first1 rest1 ->
-                    force <| map (\( b, c ) -> ( first1, b, c )) (product2 list2 list3) +++ product3 rest1 list2 list3
+andThen : (a -> Lazy b) -> Lazy a -> Lazy b
+andThen callback a =
+    lazy (\() -> force (callback (force a)))
 
 
-{-| Create a lazy list containing all possible 4-tuples in the given lazy lists.
+
+-- FORMING RECURSION
+
+
+{-| The shared lazy `fix' point function is a functional expression for recursion:
+it is called "shared" because the result accumulates to the same binding as
+is the argument to the function, thus making the binding recursive.
+This "lazy" version only works with delayed execution functions as
+the checks built into `force' will prevent recursive evaluation and
+potential stack overflow, throwing an exception before that happens.
+Common uses are with lazy lists with deferred execution in their structure.
+For example, using a function that produces a lazy list (delayed execution) of
+all the 32-bit `Int' natural numbers (with upper bounds check) code as follows::
+
+    type LazyList a = Empty | Cons a (Lazy (LazyList a))
+    plus1 ll =
+      case ll of
+        Empty -> Empty
+        Cons hd tl ->
+          if hd == ox7FFFFFFF then Empty else
+          Cons (hd + 1) <| lazy <| \() -> plus1 <| force tl
+    nat32fs() =
+      fix <| plus1 << Cons -1
+
+By using `fix' we get a recursive (lazy) chain of computations
+producing the lazy list of all naturals in this case, although this is a
+contrived case and there are more direct ways to accomplish this task.
 -}
-product4 : LazyList a -> LazyList b -> LazyList c -> LazyList d -> LazyList ( a, b, c, d )
-product4 list1 list2 list3 list4 =
-    lazy <|
-        \() ->
-            case force list1 of
-                Nil ->
-                    Nil
-
-                Cons first1 rest1 ->
-                    force <| map (\( b, c, d ) -> ( first1, b, c, d )) (product3 list2 list3 list4) +++ product4 rest1 list2 list3 list4
-
-
-{-| Create a lazy list containing all possible 5-tuples in the given lazy lists.
--}
-product5 : LazyList a -> LazyList b -> LazyList c -> LazyList d -> LazyList e -> LazyList ( a, b, c, d, e )
-product5 list1 list2 list3 list4 list5 =
-    lazy <|
-        \() ->
-            case force list1 of
-                Nil ->
-                    Nil
-
-                Cons first1 rest1 ->
-                    force <| map (\( b, c, d, e ) -> ( first1, b, c, d, e )) (product4 list2 list3 list4 list5) +++ product5 rest1 list2 list3 list4 list5
-
-
-{-| Convert a lazy list to a normal list.
--}
-toList : LazyList a -> List a
-toList list =
-    case force list of
-        Nil ->
-            []
-
-        Cons first rest ->
-            first :: toList rest
-
-
-{-| Convert a normal list to a lazy list.
--}
-fromList : List a -> LazyList a
-fromList =
-    List.foldr cons empty
-
-
-{-| Convert a lazy list to an array.
--}
-toArray : LazyList a -> Array a
-toArray list =
-    case force list of
-        Nil ->
-            Array.empty
-
-        Cons first rest ->
-            Array.append (Array.push first Array.empty) (toArray rest)
-
-
-{-| Convert an array to a lazy list.
--}
-fromArray : Array a -> LazyList a
-fromArray =
-    Array.foldr cons empty
-
-
-
----------------------
--- INFIX OPERATORS --
----------------------
-
-
-infixr 5 :::
-
-
-{-| Alias for `cons`. Analogous to `::` for lists.
--}
-(:::) : a -> LazyList a -> LazyList a
-(:::) =
-    cons
-
-
-infixr 5 +++
-
-
-{-| Alias for `append`. Analogous to `++` for lists.
--}
-(+++) : LazyList a -> LazyList a -> LazyList a
-(+++) =
-    append
+fix : (Lazy a -> a) -> a
+fix f =
+    let
+        r =
+            lazy <| \() -> f r
+    in
+        force r
