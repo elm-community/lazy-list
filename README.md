@@ -4,8 +4,6 @@ This library depends on [elm-lang/lazy-list](https://github.com/elm-lang/lazy), 
 
 An alternative implementation that does not memoize, and does not depend on elm-lang/lazy can be found here:
 
-<https://github.com/eeue56/elm-lazy-list>
-
 <http://package.elm-lang.org/packages/eeue56/elm-lazy-list/latest>
 
 # Lazy list implementation in Elm
