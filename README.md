@@ -1,11 +1,11 @@
 # Will be deprecated in Elm 0.19
 
-This library depends on https://github.com/elm-lang/lazy, which makes use of native code to memoize in addition to performing delayed computation. See the comments there to understand why this is generally not what is needed for most use cases of lazy.
+This library depends on [elm-lang/lazy-list](https://github.com/elm-lang/lazy), which makes use of native code to memoize in addition to performing delayed computation. See the comments there to understand why this is generally not what is needed for most use cases of lazy.
 
 An alternative implementation that does not memoize, and does not depend on elm-lang/lazy can be found here:
 
-https://github.com/eeue56/elm-lazy-list
-http://package.elm-lang.org/packages/eeue56/elm-lazy-list/latest
+<https://github.com/eeue56/elm-lazy-list>
+<http://package.elm-lang.org/packages/eeue56/elm-lazy-list/latest>
 
 # Lazy list implementation in Elm
 
